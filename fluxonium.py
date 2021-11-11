@@ -7,8 +7,10 @@ Created on Wed Nov 10 14:55:59 2021
 
 import numpy as np
 from scipy.linalg import expm
+from inspect import getfullargspec as showarg
 
 class Fluxonium():
+    
     def __init__(self,Ej,Ec,El,cutoff,
                                 start = 0,
                                 stop = 0.5,
@@ -19,7 +21,25 @@ class Fluxonium():
         self.phi = np.linspace(start,stop,points)
         self.points = points
         self.cutoff = cutoff
-        
+    
+    def get_x(self,start=0, stop=0.5, points= 101):
+        """
+        Formatted timeline creation.
+    
+        Parameters
+        ----------
+        span : float, optional
+            Overall length of timeline. The default is .0.
+        sampling_rate : float, optional
+            Sampling rate for DAC. The default is 1e9 (Suggested).
+    
+        Returns
+        -------
+        np.array
+    
+        """
+        return np.linspace(start,stop,points)
+    
     def hamiltonian_exp(self,phi):
             """
             Return the Hamiltonian matrix with energy in GHz calculated with
@@ -121,35 +141,121 @@ class Fluxonium():
                 
         return spectrum[1:,:]
     
-    def matrix_ele(self,operator,bra,ket):
+    def matrix_ele(self,operator: str,bra_ket: list):
         if operator == "phi":
             operate = self.op_phi()
         elif operator == "n":
             operate = self.op_n()
             
-    
-        matrix_element = []
-        
-        for i in self.phi:
+        if type(bra_ket) == list:
+            matrix_element = np.zeros((len(bra_ket),self.points))
+        else:
+            trans = 0
+            for i in range(bra_ket):
+                trans += i
+            matrix_element = [[] for i in range(trans)]
+            
+        for colum, i in  enumerate(self.phi):
             H = self.hamiltonian_exp(i)
             _,temp = self.eigen(H)
-            matrix_element.append(abs(np.dot(temp[:][bra].T,np.dot(operate,temp[:][ket]))))
+            for roll, transition in enumerate(bra_ket):
+                matrix_element[roll][colum] = abs(np.dot(temp[:][transition[0]].T,np.dot(operate,temp[:][transition[1]])))
         return np.array(matrix_element)
     
-    
-    def Plot1DSpectrum(self):
-        from pylab import plot,show
-        
-        func = self.matrix_ele("phi",0,2)
-        plot(self.phi,func)
-        show()
 
+    def function_mappings(self):
+        return {
+            'eigen_spectrum': self.eigen_spectrum,
+            'matrix_ele': self.matrix_ele
+            }
+
+    def setFunc(self,
+            func: str, funcArg: list,
+            start: float = .0, stop: float = 0.5,points: int = 101
+            ):
+        """
+        Shape function wrapper.
+    
+        Parameters
+        ----------
+        func : str/function handle
+            Shape function to be used, can be specified by string or function
+            handle.
+        funcArg : list/dict
+            List/dict of arguments of the function. In dict mode, the user can
+            declare key-value pair with each key corresponding to the argument of
+            the function. The key must match the argument name.
+        start : start of the external flux
+        stop : stop of the external flux
+        points : points of the external flux
+    
+        """
+
+        if isinstance(func, str):
+            func = self.function_mappings()[func]
+        argNames = showarg(func).args[1:] #get function args besides x
+        if isinstance(funcArg, dict):
+            funcArg = [funcArg[arg] for arg in argNames]
+    
+        generator = {
+            'function': func.__name__, #__name__is function's name
+            'X': {'start': start, 'stop': stop, 'points': points},
+            'Y': dict(zip(argNames, funcArg))
+            }
+        return generator
+
+    def parse(self,generator: dict):
+        """
+        Parse and compile generator data into wave x-y data
+    
+        Parameters
+        ----------
+        generator : dict
+            Discription dict for wave generation.
+    
+        Returns
+        -------
+        x : np.array
+            x (time) data.
+        y : np.array
+            y (amplitude) data.
+        name : str
+            Name of wave.
+    
+    
+        """
         
-                    
+        # x
+        start = generator['X']['start']
+        stop = generator['X']['stop']
+        points = generator['X']['points']
+        x = self.get_x(start,stop,points)
+        # y
+        func = generator['function']
+        if isinstance(func, str):
+            func = self.function_mappings()[func]
+        argNames = showarg(func).args[1:]
+        funcArg = [generator['Y'][arg] for arg in argNames]
+        y = func(*funcArg)
         
+        
+        return x, y
+    
+    def plot1Dspectrum(self,func_name, argdict):
+        from pylab import figure,plot, show
+        
+        generator = self.setFunc(func_name, argdict)
+        x,y = self.parse(generator)
+        
+        figure()
+        for yi in y:
+            plot(x,yi)
+        show()
+        return x,y
+    
 if __name__ == "__main__":
     
-    Ej = 5
+    Ej = 6
     Ec = 1
     El = 1
     start = 0
@@ -157,8 +263,11 @@ if __name__ == "__main__":
     points = 11
     levels = 3
     limit = 5.0
-
-    fluxonium = Fluxonium(Ej,Ec,El,101)
-    fluxonium.Plot1DSpectrum()
     
+    
+    fluxonium = Fluxonium(Ej,Ec,El,101)
+    
+    a = fluxonium.plot1Dspectrum('matrix_ele', {'operator':'phi','bra_ket':[[1,2],[0,2],[0,1]]})
+    c = fluxonium.plot1Dspectrum('matrix_ele', {'operator':'n','bra_ket':[[1,2],[0,2],[0,1]]})
+    b = fluxonium.plot1Dspectrum('eigen_spectrum', {'levels':3})
     
