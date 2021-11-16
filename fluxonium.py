@@ -50,7 +50,8 @@ class Fluxonium():
         np.array
     
         """
-        return np.linspace(start,stop,points)
+        self.x = np.linspace(start,stop,points)
+        return self.x
     
     def hamiltonian_exp(self,phi):
             """
@@ -72,7 +73,8 @@ class Fluxonium():
             phi_square = np.dot(self.op_phi(),self.op_phi())
             cos_ex =  1./2.*np.exp(-1j*phi*np.pi*2.)*expm(1j*self.op_phi())\
                      +1./2.*np.exp(1j*phi*np.pi*2.)*expm(-1j*self.op_phi())
-    
+            
+
             return 4*self.Ec*n_square + 0.5*self.El*phi_square -self.Ej*cos_ex
         
     def op_phi(self):
@@ -199,7 +201,7 @@ class Fluxonium():
     def matrix_ele(self,operator: str,bra_ket: list):
         """
         for matrix element
-
+        <eigen state|n_op|eigen state> or <eigen state|phi_op|eigen state>
         Parameters
         ----------
         operator : str
@@ -229,14 +231,52 @@ class Fluxonium():
                 matrix_element[roll][colum] = abs(np.dot(temp[:][transition[0]].T,np.dot(operate,temp[:][transition[1]])))
         return np.array(matrix_element)
     
+    def T1_die_loss(self,El_array):
+        """
+        use fluctuation noise source for simulating
+        the T1 which caused by dieletric loss
 
+        Parameters
+        ----------
+        El_array : list
+            the parameter you want to see
+
+        Returns
+        -------
+        res : np.array
+            DESCRIPTION.
+
+        """
+        El_array = np.append(El_array,self.El)
+        kB = 1.38064852e-23
+        T = 0.01 #10 mk
+        h_bar = 6.62e-34/(2*np.pi)    #Placnk's reduce constant
+        
+        res = np.zeros((len(El_array),len(self.x)))
+        for index,i in enumerate(El_array):
+            self.El = i
+            w = self.eigen_spectrum(3,[True,True])[1]*1e9*2*np.pi
+            y_phi_ele = self.matrix_ele('phi', [[0,1]])[0]
+            
+            
+            Ec_hbar = h_bar*self.Ec*2*np.pi*1e9
+            Q_cap = 1e6*(2*np.pi*6e9/w)**(-0.1)
+            
+            gamma_cap = h_bar/(4*Ec_hbar*Q_cap)
+            gamma_cap = gamma_cap*(w**2)*((y_phi_ele)**2)
+            for idx in range(len(gamma_cap)):
+                gamma_cap[idx] = gamma_cap[idx]*abs(coth(h_bar*w[idx]/(2*kB*T))+1)
+            res[index] = np.log10(1e6/(2*np.pi*gamma_cap))
+        return res
+    
     def function_mappings(self):
         """
         str to func mappings, the IO for Plot1DSpectrum
         """
         return {
             'eigen_spectrum': self.eigen_spectrum,
-            'matrix_ele': self.matrix_ele
+            'matrix_ele': self.matrix_ele,
+            'T1_die_loss': self.T1_die_loss
             }
 
     def setFunc(self,
@@ -296,8 +336,8 @@ class Fluxonium():
         start = generator['X']['start']
         stop = generator['X']['stop']
         points = generator['X']['points']
-        x = self.get_x(start,stop,points)
-        self.x = x
+        self.get_x(start,stop,points)
+        
         # y
         func = generator['function']
         if isinstance(func, str):
@@ -307,7 +347,7 @@ class Fluxonium():
         y = func(*funcArg)
         
         
-        return x, y
+        return self.x, y
     
     def plot1Dspectrum(self,func_name, argdict,start = -1,stop = 1,points = 101):
         """
@@ -349,19 +389,24 @@ if __name__ == "__main__":
     """
     1, dispersive shift......
     """
-    Ej = 3
-    Ec = 0.84
-    El = 1
-    start = -0.5
-    stop = 0.5
-    points = 201
-    levels = 3
-    limit = 5.0
+    from mpmath import coth
     
+    start = 0
+    stop = 0.5
+    points = 101
+    levels = 9
+    
+    loop_size = 3
+    res = np.zeros((loop_size,points))
+
+    Ej = 5
+    Ec = 1
+    El = 1
     
     fluxonium = Fluxonium(Ej,Ec,El,101)
     
     #a = fluxonium.plot1Dspectrum('matrix_ele', {'operator':'phi','bra_ket':[[1,2],[0,2],[0,1]]})
     #c = fluxonium.plot1Dspectrum('matrix_ele', {'operator':'n','bra_ket':[[1,2],[0,2],[0,1]]})
-    b = fluxonium.plot1Dspectrum('eigen_spectrum', {'levels':levels,'transition':[True,False]},0,0.5,101)
-    
+    #b = fluxonium.plot1Dspectrum('eigen_spectrum', {'levels':levels,'transition':[False,False]},-1,1,101)
+    #d = fluxonium.plot1Dspectrum('T1_die_loss', {'El_array':[0.5,0.75]},0,0.5,201)
+        
