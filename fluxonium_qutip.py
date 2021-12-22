@@ -11,6 +11,19 @@ from inspect import getfullargspec as showarg
 import qutip as qt
 
 class Fluxonium():
+    """
+    1, For characterizing the single junction fluxonium
+    in different Ej, Ec, El.
+    
+    2, For quickly, can use plot 1D spectrum to see the
+    every function result, or can directly use the 
+    function you want to count.
+    
+    3, The way to use plot1Dspectrum is under the main
+    can be used.
+    
+    4, 
+    """
     def __init__(self,Ej,Ec,El,cutoff,start = -1,
                                       stop = 1,
                                       points = 201):
@@ -107,6 +120,20 @@ class Fluxonium():
         return na
     
     def op_sin_phi(self,phi_ext):
+        """
+        
+
+        Parameters
+        ----------
+        phi_ext : float 
+            (external flux without 2pi).
+
+        Returns
+        -------
+        sine_ope : 
+            np.array 2D array
+
+        """
         ope = 1.0j * (self.op_phi() + np.eye(self.cutoff+1)*phi_ext*2*np.pi)
         sine_ope = ((ope/2.0).expm() - (-ope/2.0).expm())/(2.0j)
         
@@ -261,7 +288,24 @@ class Fluxonium():
         return res
     
     def T_qp_sing_junc(self,xqp_list,transition = [0,1]):
+        """
         
+
+        Parameters
+        ----------
+        xqp_list : list
+            xqp: the density of the cooper pair,
+        transition : list, optional
+            choose the state to state transition you want.
+            [i,j]: i----->j
+            The default is [0,1].
+            
+        Returns
+        -------
+        T1 from single junction
+            log(T1( us )).
+
+        """
         relax_time_qp = np.zeros((len(xqp_list),self.points))
         h = 6.626e-34
         e = 1.6e-19
@@ -275,7 +319,24 @@ class Fluxonium():
             relax_time_qp[idx] = 1e6/relaxa_qp
         return np.log10(relax_time_qp)
     def T_qp_array(self,xqp_list,transition = [0,1]):
+        """
         
+
+        Parameters
+        ----------
+        xqp_list : list
+            xqp: the density of the cooper pair,
+        transition : list, optional
+            choose the state to state transition you want.
+            [i,j]: i----->j
+            The default is [0,1].
+            
+        Returns
+        -------
+        T1 from junction array
+            log(T1( us )).
+
+        """
         relax_time_qp = np.zeros((len(xqp_list),self.points))
         h = 6.626e-34
         e = 1.6e-19
@@ -290,19 +351,22 @@ class Fluxonium():
         return np.log10(relax_time_qp)
     def T_dephasing(self,transition = [1]):
         """
-        
-
+        show the T1 limit by single junction and junction
+        at the same time
+        (but the need to check the way I do is correct)#############################################################################
         Parameters
         ----------
-        transition : list
-            decide the transition you want.
-            ex.
-                0--->1: 1
-                0--->2: 2.....
-            transition = [1,2]
+        xqp_list : list
+            xqp: the density of the cooper pair,
+        transition : list, optional
+            choose the state to state transition you want.
+            [i,j]: i----->j
+            The default is [0,1].
+            
         Returns
         -------
-        None.
+        T1 
+            log(T1( us )).
 
         """
         dephase_time = np.zeros((len(transition),self.points-1)) # points -1 is for differential
@@ -319,7 +383,35 @@ class Fluxonium():
             dephase_time[i-1] = 1/dephase_rate
         self.x = np.linspace(self.start,self.stop,self.points-1) #remove one point for plot
         return dephase_time
-    
+    def T1_limit(self,xqp_list,transition = [0,1]):
+        """
+        
+
+        Parameters
+        ----------
+        transition : list
+            decide the transition you want.
+            ex.
+                0--->1: 1
+                0--->2: 2.....
+            transition = [1,2]
+        Returns
+        -------
+        None.
+
+        """
+        res1 = self.T_qp_sing_junc(xqp_list,transition)
+        res2 = self.T_qp_array(xqp_list,transition)
+        
+        T1 = np.zeros((len(xqp_list),self.points))
+        
+        for n_xqp in range(len(xqp_list)):
+            for i in range(self.points):
+                if res1[n_xqp][i] >= res2[n_xqp][i]:
+                    T1[n_xqp][i] = res2[n_xqp][i]
+                else:
+                    T1[n_xqp][i] = res1[n_xqp][i]
+        return T1
     def function_mappings(self):
         """
         str to func mappings, the IO for Plot1DSpectrum
@@ -330,7 +422,8 @@ class Fluxonium():
             'T1_die_loss': self.T1_die_loss,
             'T_dephasing': self.T_dephasing,
             'T_qp_sing_junc': self.T_qp_sing_junc,
-            'T_qp_array': self.T_qp_array
+            'T_qp_array': self.T_qp_array,
+            'T1_limit': self.T1_limit
             }
             
     def setFunc(self,
@@ -348,13 +441,11 @@ class Fluxonium():
             List/dict of arguments of the function. In dict mode, the user can
             declare key-value pair with each key corresponding to the argument of
             the function. The key must match the argument name.
-        start : start of the external flux
-        stop : stop of the external flux
-        points : points of the external flux
-    
+        
         """
 
         if isinstance(func, str):
+            name = func
             func = self.function_mappings()[func]
         argNames = showarg(func).args[1:] #get function args besides x
         if isinstance(funcArg, dict):
@@ -363,7 +454,8 @@ class Fluxonium():
         generator = {
             'function': func.__name__, #__name__is function's name
             'X': {'start': self.start, 'stop': self.stop, 'points': self.points},
-            'Y': dict(zip(argNames, funcArg))
+            'Y': dict(zip(argNames, funcArg)),
+            'name': name
             }
         return generator
 
@@ -382,7 +474,8 @@ class Fluxonium():
             x (phi) data.
         y : np.array
             y (amplitude) data.
-    
+        title : str
+                for title of the plot
         """
 
         # y
@@ -392,9 +485,10 @@ class Fluxonium():
         argNames = showarg(func).args[1:]
         funcArg = [generator['Y'][arg] for arg in argNames]
         y = func(*funcArg)
+        title = generator['name']
         
         
-        return self.x, y
+        return self.x, y, title
     
     def plot1Dspectrum(self,func_name, argdict):
         """
@@ -419,16 +513,17 @@ class Fluxonium():
             phi
         y : 2D array
             for different parameters in the argdict
-
+        
         """
-        from pylab import figure,plot, show
+        from pylab import figure,plot, show,title
         
         generator = self.setFunc(func_name, argdict)
-        x,y = self.parse(generator)
+        x,y,name = self.parse(generator)
         
         figure()
         for yi in y:
             plot(x,yi)
+            title(name)
         show()
         return x,y
     
@@ -456,9 +551,10 @@ if __name__ == "__main__":
     
     #a = fluxonium.plot1Dspectrum('matrix_ele', {'operator':'phi','bra_ket':[[0,1]]})
     #c = fluxonium.plot1Dspectrum('matrix_ele', {'operator':'n','bra_ket':[[1,2],[0,2]]})
-    #b = fluxoniumq.plot1Dspectrum('eigen_spectrum', {'levels':levels,'transition':[True,True]})
-    #d = fluxoniumq.plot1Dspectrum('T1_die_loss', {'times':[1,2]})
+    #b = fluxonium.plot1Dspectrum('eigen_spectrum', {'levels':levels,'transition':[True,True]})
+    #d = fluxonium.plot1Dspectrum('T1_die_loss', {'times':[1,2]})
     #e = fluxonium.plot1Dspectrum('T_dephasing', {'transition':[1,2]})
     #f = fluxonium.plot1Dspectrum('matrix_ele', {'operator':'sin(phi/2)','bra_ket':[[0,1]]})
-    #g = fluxonium.plot1Dspectrum('T_qp_sing_junc', {'xqp_list':[4e-7],'transition':[0,1]})
-    #h = fluxonium.plot1Dspectrum('T_qp_array', {'xqp_list':[4e-7],'transition':[0,2]})
+    #g = fluxonium.plot1Dspectrum('T_qp_sing_junc', {'xqp_list':[4e-7,2e-7],'transition':[0,2]})
+    #h = fluxonium.plot1Dspectrum('T_qp_array', {'xqp_list':[4e-7,2e-7],'transition':[0,2]})
+    #i = fluxonium.plot1Dspectrum('T1_limit', {'xqp_list':[4e-7,2e-7],'transition':[0,2]})
