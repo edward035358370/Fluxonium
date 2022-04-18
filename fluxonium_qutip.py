@@ -407,10 +407,9 @@ class Fluxonium():
         
         for n_xqp in range(len(xqp_list)):
             for i in range(self.points):
-                if res1[n_xqp][i] >= res2[n_xqp][i]:
-                    T1[n_xqp][i] = res2[n_xqp][i]
-                else:
-                    T1[n_xqp][i] = res1[n_xqp][i]
+                temp = (1/res2[n_xqp][i]) **2 + (1/res1[n_xqp][i])**2
+                T1[n_xqp][i] = (1/temp)**0.5
+                
         return T1
     def function_mappings(self):
         """
@@ -536,9 +535,9 @@ if __name__ == "__main__":
     from mpmath import coth
     
     start = 0
-    stop = 1
-    points = 201
-    levels = 3
+    stop = 0.5
+    points = 101
+    levels = 6
     
     loop_size = 3
     res = np.zeros((loop_size,points))
@@ -555,6 +554,6 @@ if __name__ == "__main__":
     #d = fluxonium.plot1Dspectrum('T1_die_loss', {'times':[1,2]})
     #e = fluxonium.plot1Dspectrum('T_dephasing', {'transition':[1,2]})
     #f = fluxonium.plot1Dspectrum('matrix_ele', {'operator':'sin(phi/2)','bra_ket':[[0,1]]})
-    #g = fluxonium.plot1Dspectrum('T_qp_sing_junc', {'xqp_list':[4e-7,2e-7],'transition':[0,2]})
-    #h = fluxonium.plot1Dspectrum('T_qp_array', {'xqp_list':[4e-7,2e-7],'transition':[0,2]})
-    #i = fluxonium.plot1Dspectrum('T1_limit', {'xqp_list':[4e-7,2e-7],'transition':[0,2]})
+    #g = fluxonium.plot1Dspectrum('T_qp_sing_junc', {'xqp_list':[4e-7,2e-7,1e-7,5e-8],'transition':[0,2]})
+    #h = fluxonium.plot1Dspectrum('T_qp_array', {'xqp_list':[4e-7,2e-7,1e-7,5e-8],'transition':[0,2]})
+    i = fluxonium.plot1Dspectrum('T1_limit', {'xqp_list':[4e-7,2e-7],'transition':[0,1]})
