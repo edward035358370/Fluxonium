@@ -24,7 +24,7 @@ class Fluxonium():
     
     4, 
     """
-    def __init__(self,Ej,Ec,El,cutoff,start = -1,
+    def __init__(self,Ej1,Ej2,Ec,El,cutoff,start = -1,
                                       stop = 1,
                                       points = 201):
         """
@@ -41,7 +41,8 @@ class Fluxonium():
         None.
 
         """
-        self.Ej = Ej
+        self.Ej1 = Ej1
+        self.Ej2 = Ej2
         self.Ec = Ec
         self.El = El
         self.cutoff = cutoff
@@ -70,7 +71,7 @@ class Fluxonium():
         self.x = np.linspace(self.start,self.stop,self.points)
         return self.x
     
-    def hamiltonian_exp(self,phi_ext):
+    def hamiltonian_exp(self,phi_total):
         """
         Return the Hamiltonian matrix with energy in GHz calculated with
         the exponential method.
@@ -86,10 +87,15 @@ class Fluxonium():
         Hamiltonian : np.matrix
             Hamiltonian matrix.
         """
-        ope = 1.0j * (self.op_phi() + phi_ext*2*np.pi)
+        
+
+        phi_ext = phi_total*(10/11)*2*np.pi
+        phi_squid = phi_total*(1/11)*2*np.pi
+        phi1 = 1.0j * (-phi_ext + self.op_phi())
+        phi2 = 1.0j * (self.op_phi() - phi_squid - phi_ext)
         
         return 4.0 * self.Ec * self.op_n() ** 2.0 + 0.5 * self.El * self.op_phi() ** 2.0\
-            - 0.5 * self.Ej * (ope.expm() + (-ope).expm())
+            - 0.5 * self.Ej1* (phi1.expm() + (-phi1).expm())- 0.5 * self.Ej2 * (phi2.expm() + (-phi2).expm())
         
     def op_phi(self):
         """
@@ -171,7 +177,7 @@ class Fluxonium():
         """
         return np.sqrt(8.*Ec*El)*(n + 0.5)
     
-    def eigen_spectrum(self,levels,transition = [True,True],two_photon=1):
+    def eigen_spectrum(self,levels,transition = [True,True]):
         """
         get the different energy state with different external flux,
         and count the transition energy
@@ -206,8 +212,8 @@ class Fluxonium():
                         spectrum = np.vstack((spectrum,energy[high] - energy[low]))
                     elif high > low and transition[1] == False:
                         spectrum = np.vstack((spectrum,energy[high] - energy[low]))
-            return spectrum[1:,:]/two_photon
-        return energy/two_photon
+            return spectrum[1:,:]
+        return energy
     
     def matrix_ele(self,operator: str,bra_ket: list):
         """
@@ -250,182 +256,14 @@ class Fluxonium():
                 
         return np.array(matrix_element)
     
-    def T1_die_loss(self,times,transition):
-        """
-        use fluctuation noise source for simulating
-        the T1 which caused by dieletric loss
-
-        Parameters
-        ----------
-        El_array : list
-            the parameter you want to see
-
-        Returns
-        -------
-        res : np.array
-            DESCRIPTION.
-
-        """
-        
-        kB = 1.38064852e-23
-        T = 0.01 #10 mk
-        h_bar = 6.62e-34/(2*np.pi)    #Placnk's reduce constant
-        
-        res = np.zeros((len(times),self.points))
-        for index,i in enumerate(times):
-
-            w = abs(self.eigen_spectrum(3,[True,True])[1]*1e9*2*np.pi)
-            y_phi_ele = self.matrix_ele('phi', transition)[0]
-            
-            Ec_hbar = h_bar*self.Ec*2*np.pi*1e9
-            Q_cap = 1e6*(2*np.pi*6e9/w)**(-0.1)
-            Q_cap = Q_cap*i
-            gamma_cap = h_bar/(4*Ec_hbar*Q_cap)
-            gamma_cap = gamma_cap*(w**2)*((y_phi_ele)**2)
-            for idx in range(len(gamma_cap)):
-                gamma_cap[idx] = gamma_cap[idx]*abs(coth(h_bar*w[idx]/(2*kB*T))+1)
-            res[index] = np.log10(1e6/(2*np.pi*gamma_cap))
-        return res
     
-    def T_qp_sing_junc(self,xqp_list,transition = [0,1]):
-        """
-        
-
-        Parameters
-        ----------
-        xqp_list : list
-            xqp: the density of the cooper pair,
-        transition : list, optional
-            choose the state to state transition you want.
-            [i,j]: i----->j
-            The default is [0,1].
-            
-        Returns
-        -------
-        T1 from single junction
-            log(T1( us )).
-
-        """
-        relax_time_qp = np.zeros((len(xqp_list),self.points))
-        h = 6.626e-34
-        e = 1.6e-19
-        gap = 93e-6*e
-        for idx,xqp in enumerate(xqp_list):
-            temp = (self.matrix_ele('sin(phi/2)',[transition])[0])**2
-            E01 = self.eigen_spectrum(9,transition = [True,True])[transition[1]]*1e9
-            constant = 8*self.Ej*h*1e9*xqp/(h*0.5)
-            constant = constant*(2*gap/(h*E01))**0.5
-            relaxa_qp = temp*constant
-            relax_time_qp[idx] = 1e6/relaxa_qp
-        return np.log10(relax_time_qp)
-    def T_qp_array(self,xqp_list,transition = [0,1]):
-        """
-        
-
-        Parameters
-        ----------
-        xqp_list : list
-            xqp: the density of the cooper pair,
-        transition : list, optional
-            choose the state to state transition you want.
-            [i,j]: i----->j
-            The default is [0,1].
-            
-        Returns
-        -------
-        T1 from junction array
-            log(T1( us )).
-
-        """
-        relax_time_qp = np.zeros((len(xqp_list),self.points))
-        h = 6.626e-34
-        e = 1.6e-19
-        gap = 93e-6*e
-        for idx,xqp in enumerate(xqp_list):
-            temp = (self.matrix_ele('phi',[transition])[0]/2)**2
-            E01 = self.eigen_spectrum(9,transition = [True,True])[transition[1]]*1e9
-            constant = 8*self.Ej*h*1e9*xqp/(h*0.5)
-            constant = constant*(2*gap/(h*E01))**0.5
-            relaxa_qp = temp*constant
-            relax_time_qp[idx] = 1e6/relaxa_qp
-        return np.log10(relax_time_qp)
-    def T_dephasing(self,transition = [1]):
-        """
-        show the T1 limit by single junction and junction
-        at the same time
-        (but the need to check the way I do is correct)#############################################################################
-        Parameters
-        ----------
-        xqp_list : list
-            xqp: the density of the cooper pair,
-        transition : list, optional
-            choose the state to state transition you want.
-            [i,j]: i----->j
-            The default is [0,1].
-            
-        Returns
-        -------
-        T1 
-            log(T1( us )).
-
-        """
-        dephase_time = np.zeros((len(transition),self.points-1)) # points -1 is for differential
-        flux_noise_amp = (4.3e-6)**2 #set by the transmon experiment
-        energy = self.eigen_spectrum(9,[True,True])
-        
-        for i in transition:
-            E = energy[i]
-            phi_ext = self.x
-            E_diff = np.diff(E)/np.diff(phi_ext)
-            E_diff_const = 2*np.pi*1e9*(flux_noise_amp*np.log(2))**0.5
-            dephase_rate = np.abs(E_diff)*E_diff_const
-            
-            dephase_time[i-1] = 1/dephase_rate
-        self.x = np.linspace(self.start,self.stop,self.points-1) #remove one point for plot
-        return dephase_time
-    def T1_limit(self,xqp_sj,xqp_arr,transition = [[0,1]]):
-        """
-        
-
-        Parameters
-        ----------
-        transition : list
-            decide the transition you want.
-            ex.
-                0--->1: 1
-                0--->2: 2.....
-            transition = [1,2]
-        Returns
-        -------
-        None.
-
-        """
-        
-        
-        #res3
-        T1 = np.zeros((len(transition),self.points))
-        
-        for trans in range(len(transition)):
-            res1 = self.T_qp_sing_junc(xqp_sj,transition[trans])
-            res2 = self.T_qp_array(xqp_arr,transition[trans])
-            res3 = self.T1_die_loss([1],[transition[trans]])
-            for i in range(self.points):
-                temp = (1/(10**res2[0][i])) **2 + (1/(10**res1[0][i]))**2 + (1/(10**res3[0][i]))**2
-                T1[trans][i] = np.log10(1/temp**0.5)
-                
-        return T1
     def function_mappings(self):
         """
         str to func mappings, the IO for Plot1DSpectrum
         """
         return {
             'eigen_spectrum': self.eigen_spectrum,
-            'matrix_ele': self.matrix_ele,
-            'T1_die_loss': self.T1_die_loss,
-            'T_dephasing': self.T_dephasing,
-            'T_qp_sing_junc': self.T_qp_sing_junc,
-            'T_qp_array': self.T_qp_array,
-            'T1_limit': self.T1_limit
+            'matrix_ele': self.matrix_ele
             }
             
     def setFunc(self,
@@ -526,36 +364,30 @@ class Fluxonium():
         for yi in y:
             plot(x,yi)
             title(name)
-        
+        show()
         return x,y
     
-if __name__ == "__main__":
+if __name__ == "__main__":     
     """
-    1, use Qutip as the function for solving the eigen
-    
-    2, dispersive shift......
+    1, didn't fit Long's thesis
     """
-    from mpmath import coth
     
-    start = 0.45
-    stop = 0.505
-    points = 51
-    levels = 4
+    start = 0
+    stop = 12
+    points = 1201
+    levels = 3
     
-    loop_size = 5
+    loop_size = 3
     res = np.zeros((loop_size,points))
 
-    Ej = 6.303
-    Ec = 0.77
-    El = 0.94
-    fluxonium = Fluxonium(Ej,Ec,El,51,start=start,stop=stop,points=points)
+    Ej1 = 5.5
+    Ej2 = 4.5
+    Ec = 1
+    El = 1
+    
+    fluxonium = Fluxonium(Ej1,Ej2,Ec,El,101,start=start,stop=stop,points=points)
     
     #a = fluxonium.plot1Dspectrum('matrix_ele', {'operator':'phi','bra_ket':[[0,1]]})
-    #b = fluxonium.plot1Dspectrum('matrix_ele', {'operator':'n','bra_ket':[[0,4],[1,4],[2,4],[3,4]]})
-    c = fluxonium.plot1Dspectrum('eigen_spectrum', {'levels':levels,'transition':[True,False],'two_photon':1.})
-    #d = fluxonium.plot1Dspectrum('T1_die_loss', {'times':[1],'transition':[[0,1]]})
-    #e = fluxonium.plot1Dspectrum('T_dephasing', {'transition':[0,1]})
-    #f = fluxonium.plot1Dspectrum('matrix_ele', {'operator':'n','bra_ket':[[0,2],[0,3],[1,2]]})
-    #g = fluxonium.plot1Dspectrum('T_qp_sing_junc', {'xqp_list':[4e-7],'transition':[0,1]})
-    #h = fluxonium.plot1Dspectrum('T_qp_array', {'xqp_list':[1e-8],'transition':[0,1]})
-    #i = fluxonium.plot1Dspectrum('T1_limit', {'xqp_sj':[4e-7],'xqp_arr':[1e-8],'transition':[[0,1],[0,2],[1,2]]})
+    c = fluxonium.plot1Dspectrum('matrix_ele', {'operator':'n','bra_ket':[[0,2]]})
+    #b = fluxonium.plot1Dspectrum('eigen_spectrum', {'levels':levels,'transition':[True,True]})
+   
